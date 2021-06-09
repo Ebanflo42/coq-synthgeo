@@ -1,4 +1,31 @@
 Require Import Setoid.
+Require Import FunctionalExtensionality.
+
+(**)
+Record MRE :=
+{ set : Prop
+; elem : set
+; op : set -> set -> set
+; subset : Prop
+; subset_incl : subset -> set
+; exist_axiom : forall (f : subset -> set), exists (x : set), f = fun y => op (subset_incl y) x
+; uniq_axiom : forall (f : subset -> set), forall (x : set),
+  f = (fun y => op (subset_incl y) (op x elem)) -> x = ex_proj1 (exist_axiom f)
+}.
+
+Definition witness_fcn : forall (M : MRE),
+  forall (f : set M -> set M),
+  exists (fn : set M -> set M),
+  forall (x : subset M),
+  (fun y => f (op M (subset_incl M x) y)) = (fun y => op M (subset_incl M x) (fn y)).
+Proof.
+intros M f.
+pose (fn0 := fun y => exist_axiom M (fun x => f (op M (subset_incl M x) y))).
+exists (fun y => ex_proj1 (fn0 y)).
+intros x.
+unfold fn0.
+rewrite -> (exist_axiom M (fun x => 
+(**)
 
 (* The basic structure of the Kock-Lawvere real numbers *)
 (* There is some redundancy in these axioms, for convenience *)
@@ -12,7 +39,7 @@ Record KockLawvere :=
 ; add_assoc : forall (x y z : synthreal), add (add x y) z = add x (add y z)
 ; add_comm : forall (x y : synthreal), add x y = add y x
 ; add_inv : forall (x : synthreal),
-  (exists (negx : synthreal),add x negx = zero)
+  (exists (negx : synthreal), add x negx = zero)
 
 (* Multiplication forms a commutative monoid with inverses except at 0 *)
 ; one : synthreal
@@ -59,13 +86,12 @@ Record KockLawvere :=
 ; nilzero_def : nilsquare_incl nilzero = zero
 
 (* The Kock-Lawvere axioms! *)
-; linearization_exist : forall (f : nilsquares -> synthreal),
-  (exists (a : synthreal), forall (d : nilsquares), 
-    f d = add (f nilzero) (mul a (nilsquare_incl d)))
-; linearization_uniq : forall (f : nilsquares -> synthreal),
+; linear_exist : forall (f : nilsquares -> synthreal),
+  (exists (a : synthreal), f = fun d => add (f nilzero) (mul a (nilsquare_incl d)))
+; linear_uniq : forall (f : nilsquares -> synthreal),
   forall (a : synthreal), (forall (d : nilsquares),
     f d = add (f nilzero) (mul a (nilsquare_incl d)))
-      -> a = ex_proj1 (linearization_exist f)
+      -> a = ex_proj1 (linear_exist f)
 
 }.
 
@@ -133,7 +159,7 @@ Qed.
 
 Fact linearize_diff : forall (K : KockLawvere),
   forall (x : synthreal K),
-  ex_proj1 (linearization_exist K (diff K x)) = x.
+  ex_proj1 (linear_exist K (diff K x)) = x.
 Proof.
 intros K x.
 assert (forall (d : nilsquares K),
@@ -147,7 +173,7 @@ rewrite -> (add_id K).
 rewrite -> (mul_comm K).
 reflexivity.
 symmetry.
-exact (linearization_uniq K (diff K x) x H).
+exact (linear_uniq K (diff K x) x H).
 Qed.
 
 
@@ -165,14 +191,44 @@ Qed.
 
 (* Single-variable calculus! *)
 
+(**)
+Remark derivative_w_prf : forall (K : KockLawvere),
+  forall (f : synthreal K -> synthreal K),
+  exists (df : synthreal K -> synthreal K),
+  forall (x : synthreal K),
+  forall (d : nilsquares K),
+  f (add K x (nilsquare_incl K d))
+  = add K (f x) (mul K (nilsquare_incl K d) (df x)).
+Proof.
+intros K f.
+pose (df0 := fun x =>
+  (linear_exist K (fun d => (f (add K x (nilsquare_incl K d)))))).
+exists (fun x => ex_proj1 (df0 x)).
+intros x d.
+(**)
+
 
 Definition derivative (K : KockLawvere)
   (f : synthreal K -> synthreal K)
   (x : synthreal K) : synthreal K :=
-  ex_proj1 (linearization_exist K (fun d => f (add K x (nilsquare_incl K d)))).
+  ex_proj1 (linear_exist K (fun d => f (add K x (nilsquare_incl K d)))).
 
 
-Theorem product_rule : forall (K : KockLawvere),
+Fact rewrite_derivative : forall (K : KockLawvere),
+  forall (f : synthreal K -> synthreal K),
+  forall (x : synthreal K),
+  forall (d : nilsquares K),
+  f (add K x (nilsquare_incl K d))
+  = add K (f x) (mul K (nilsquare_incl K d) (derivative K f x)).
+Proof.
+intros K f x d.
+pose (ex_df := fun y => linear_exist K (fun d0 => f (add K y (nilsquare_incl K d0)))).
+unfold derivative.
+exact (linear_uniq K (fun d1 =>
+  f (add K x (nilsquare_incl K d1))) (derivative K f x) H).
+
+
+Proposition product_rule : forall (K : KockLawvere),
   forall (f : synthreal K -> synthreal K),
   forall (g : synthreal K -> synthreal K),
   forall (x : synthreal K),
