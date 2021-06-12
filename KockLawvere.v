@@ -1,6 +1,20 @@
 Require Import Setoid.
 Require Import FunctionalExtensionality.
 
+
+Lemma uniq_choice : forall (A B : Prop),
+  forall (P : A -> B -> Prop),
+  (forall (a : A), exists! (b : B), P a b)
+  -> (exists (f : A -> B), forall (a : A), P a (f a)).
+Proof.
+  intros.
+  exists (fun a => ex_proj1 (H a)).
+  intros.
+  destruct (H a), u.
+  auto.
+Qed.
+
+
 (**)
 Record MRE :=
 { set : Prop
@@ -8,90 +22,92 @@ Record MRE :=
 ; op : set -> set -> set
 ; subset : Prop
 ; subset_incl : subset -> set
-; exist_axiom : forall (f : subset -> set), exists (x : set), f = fun y => op (subset_incl y) x
-; uniq_axiom : forall (f : subset -> set), forall (x : set),
-  f = (fun y => op (subset_incl y) (op x elem)) -> x = ex_proj1 (exist_axiom f)
+; exist_axiom : forall (f : subset -> set), exists! (x : set),
+  f = fun y => op (subset_incl y) x
 }.
 
 Definition witness_fcn : forall (M : MRE),
   forall (f : set M -> set M),
   exists (fn : set M -> set M),
-  forall (x : subset M),
-  (fun y => f (op M (subset_incl M x) y)) = (fun y => op M (subset_incl M x) (fn y)).
+  forall (x : set M),
+  (fun y => f (op M (subset_incl M y) x))
+  = (fun y => op M (subset_incl M y) (fn x)).
 Proof.
-intros M f.
-pose (fn0 := fun y => exist_axiom M (fun x => f (op M (subset_incl M x) y))).
-exists (fun y => ex_proj1 (fn0 y)).
-intros x.
-unfold fn0.
-rewrite -> (exist_axiom M (fun x => 
-(**)
+  intros.
+  assert (forall (x : set M), exists! (y : set M),
+    (fun d => f (op M (subset_incl M d) x))
+    = (fun d => op M (subset_incl M d) y)).
+  intro.
+  exact (exist_axiom M (fun d => f (op M (subset_incl M d) x))).
+  pose (pred := fun x => fun y =>
+    (fun d : subset M => f (op M (subset_incl M d) x))
+    = (fun d : subset M => op M (subset_incl M d) y)).
+  exact (uniq_choice (set M ) (set M) pred H).
+Defined.
 
-(* The basic structure of the Kock-Lawvere real numbers *)
+(* The basic structure of the Rock-Lawvere real numbers *)
 (* There is some redundancy in these axioms, for convenience *)
-Record KockLawvere :=
-{ synthreal : Prop
+Record SynthReal :=
+{ set : Prop
 
 (* Addition forms an Abelian group *)
-; zero : synthreal
-; add : synthreal -> synthreal -> synthreal
-; add_id : forall (x : synthreal), add x zero = x
-; add_assoc : forall (x y z : synthreal), add (add x y) z = add x (add y z)
-; add_comm : forall (x y : synthreal), add x y = add y x
-; add_inv : forall (x : synthreal),
-  (exists (negx : synthreal), add x negx = zero)
+; zero : set
+; add : set -> set -> set
+; add_id : forall (x : set), add x zero = x
+; add_assoc : forall (x y z : set), add (add x y) z = add x (add y z)
+; add_comm : forall (x y : set), add x y = add y x
+; add_inv : forall (x : set),
+  (exists (negx : set), add x negx = zero)
 
 (* Multiplication forms a commutative monoid with inverses except at 0 *)
-; one : synthreal
-; mul : synthreal -> synthreal -> synthreal
-; mul_id : forall (x : synthreal), mul x one = x
-; mul_assoc : forall (x y z : synthreal), mul (mul x y) z = mul x (mul y z)
-; mul_comm : forall (x y : synthreal), mul x y = mul y x
-; mul_inv : forall (x : synthreal), x <> zero
-  -> (exists (invx : synthreal), mul x invx = one)
+; one : set
+; mul : set -> set -> set
+; mul_id : forall (x : set), mul x one = x
+; mul_assoc : forall (x y z : set), mul (mul x y) z = mul x (mul y z)
+; mul_comm : forall (x y : set), mul x y = mul y x
+; mul_inv : forall (x : set), x <> zero
+  -> (exists (invx : set), mul x invx = one)
 
 (* Multiplication distributes over addition *)
-; left_distrib : forall (x y z : synthreal),
+; left_distrib : forall (x y z : set),
   mul x (add y z) = add (mul x y) (mul x z)
-; right_distrib : forall (x y z : synthreal),
+; right_distrib : forall (x y z : set),
   mul (add x y) z = add (mul x z) (mul y z)
 
 (* A total ordering which behaves nicely with the field operations *)
-; lessthan : synthreal -> synthreal -> Prop
-; transitive : forall (x y z : synthreal), (lessthan x y) -> (lessthan y z)
+; lessthan : set -> set -> Prop
+; transitive : forall (x y z : set), (lessthan x y) -> (lessthan y z)
   -> (lessthan x z)
 ; zero_less_one : lessthan zero one
-; total : forall (x y : synthreal), x <> y -> lessthan x y \/ lessthan y x
-; translation : forall(x y z : synthreal),
+; total : forall (x y : set), x <> y -> lessthan x y \/ lessthan y x
+; translation : forall(x y z : set),
   lessthan x y -> lessthan (add x z) (add y z)
-; dilation : forall (x y z : synthreal),
+; dilation : forall (x y z : set),
   (not (lessthan z zero) /\ lessthan x y) -> lessthan (mul z x) (mul z y)
 
 (* Square roots existence and uniqueness *)
-; sqrt_exist : forall (x : synthreal), (exists (y : synthreal), mul y y = x)
-; sqrt_uniq : forall (x y : synthreal), (lessthan zero y /\ mul y y = x)
+; sqrt_exist : forall (x : set), (exists (y : set), mul y y = x)
+; sqrt_uniq : forall (x y : set), (lessthan zero y /\ mul y y = x)
   -> y = ex_proj1 (sqrt_exist x)
 
 (* Nilsquare infinitesimals are treated as a separate type *)
 (* with an injection into the rest of the field *)
 ; nilsquares : Prop
-; nilsquare_incl : nilsquares -> synthreal
+; nilsquare_incl : nilsquares -> set
 ; nilsquare_subset : forall (d1 d2 : nilsquares),
   nilsquare_incl d1 = nilsquare_incl d2 -> d1 = d2
 ; nilsquare_def : forall (d : nilsquares),
   mul (nilsquare_incl d) (nilsquare_incl d) = zero
-; nilsquare_recl : forall (x : synthreal),
-  forall (nilsqr : mul x x = zero), exists (d : nilsquares), x = nilsquare_incl d
+; nilsquare_recl : forall (x : set),
+  forall (nilsqr : mul x x = zero),
+    exists (d : nilsquares), x = nilsquare_incl d
 ; nilzero : nilsquares
 ; nilzero_def : nilsquare_incl nilzero = zero
 
-(* The Kock-Lawvere axioms! *)
-; linear_exist : forall (f : nilsquares -> synthreal),
-  (exists (a : synthreal), f = fun d => add (f nilzero) (mul a (nilsquare_incl d)))
-; linear_uniq : forall (f : nilsquares -> synthreal),
-  forall (a : synthreal), (forall (d : nilsquares),
-    f d = add (f nilzero) (mul a (nilsquare_incl d)))
-      -> a = ex_proj1 (linear_exist f)
+(* The Kock-Lawvere axiom! *)
+; KockLawvere : forall (f : nilsquares -> set),
+  (exists (a : set),
+    f = fun d => add (f nilzero) (mul a (nilsquare_incl d)))
 
 }.
 
@@ -99,91 +115,91 @@ Record KockLawvere :=
 (* Basic algebra stuff *)
 
 
-Fact cancel_add : forall (K: KockLawvere),
-  forall (x y z : synthreal K),
-  add K x z = add K y z -> x = y.
+Fact cancel_add : forall (R: SynthReal),
+  forall (x y z : set R),
+  add R x z = add R y z -> x = y.
 Proof.
-intros K x y z hyp.
-rewrite <- (add_id K x).
-destruct (add_inv K z).
+intros R x y z hyp.
+rewrite <- (add_id R x).
+destruct (add_inv R z).
 rewrite <- H.
-rewrite <- (add_assoc K x z x0).
+rewrite <- (add_assoc R x z x0).
 rewrite -> hyp.
-rewrite -> (add_assoc K y z x0).
+rewrite -> (add_assoc R y z x0).
 rewrite -> H.
-rewrite -> (add_id K y).
+rewrite -> (add_id R y).
 reflexivity.
 Qed.
 
 
-Fact mul_zero : forall (K : KockLawvere),
-  forall (x : synthreal K),
-  mul K (zero K) x = zero K.
+Fact mul_zero : forall (R : SynthReal),
+  forall (x : set R),
+  mul R (zero R) x = zero R.
 Proof.
-intros K x.
-assert (add K (mul K (zero K) x) (mul K (zero K) x)
-  = add K (zero K) (mul K (zero K) x)).
-rewrite -> (add_comm K (zero K) (mul K (zero K) x)).
-rewrite -> (add_id K).
-rewrite <- (right_distrib K (zero K) (zero K) x).
-rewrite -> (add_id K (zero K)) at 1.
+intros R x.
+assert (add R (mul R (zero R) x) (mul R (zero R) x)
+  = add R (zero R) (mul R (zero R) x)).
+rewrite -> (add_comm R (zero R) (mul R (zero R) x)).
+rewrite -> (add_id R).
+rewrite <- (right_distrib R (zero R) (zero R) x).
+rewrite -> (add_id R (zero R)) at 1.
 reflexivity.
-exact (cancel_add K (mul K (zero K) x) (zero K) (mul K (zero K) x) H).
+exact (cancel_add R (mul R (zero R) x) (zero R) (mul R (zero R) x) H).
 Qed.
 
 
 (* A few utilities before beginning single variable calculus *)
 
 
-Definition diff (K : KockLawvere) (x : synthreal K)
-  (d : nilsquares K) : synthreal K := mul K (nilsquare_incl K d) x.
+Definition diff (R : SynthReal) (x : set R)
+  (d : nilsquares R) : set R := mul R (nilsquare_incl R d) x.
 
 
-Fact nilsquare_diff : forall (K : KockLawvere),
-  forall (x : synthreal K),
-  forall (d : nilsquares K),
-  mul K (diff K x d) (diff K x d) = zero K.
+Fact nilsquare_diff : forall (R : SynthReal),
+  forall (x : set R),
+  forall (d : nilsquares R),
+  mul R (diff R x d) (diff R x d) = zero R.
 Proof.
-intros K x d.
+intros R x d.
 unfold diff.
-rewrite -> (mul_comm K (nilsquare_incl K d) x) at 1.
-rewrite -> (mul_assoc K x (nilsquare_incl K d) (mul K (nilsquare_incl K d) x)).
-rewrite <- (mul_assoc K (nilsquare_incl K d) (nilsquare_incl K d) x).
-rewrite -> (nilsquare_def K d).
-rewrite -> (mul_zero K).
-rewrite -> (mul_comm K).
-rewrite -> (mul_zero K).
+rewrite -> (mul_comm R (nilsquare_incl R d) x) at 1.
+rewrite -> (mul_assoc R x (nilsquare_incl R d) (mul R (nilsquare_incl R d) x)).
+rewrite <- (mul_assoc R (nilsquare_incl R d) (nilsquare_incl R d) x).
+rewrite -> (nilsquare_def R d).
+rewrite -> (mul_zero R).
+rewrite -> (mul_comm R).
+rewrite -> (mul_zero R).
 reflexivity.
 Qed.
 
 
-Fact linearize_diff : forall (K : KockLawvere),
-  forall (x : synthreal K),
-  ex_proj1 (linear_exist K (diff K x)) = x.
+Fact linearize_diff : forall (R : SynthReal),
+  forall (x : set R),
+  ex_proj1 (linear_exist R (diff R x)) = x.
 Proof.
-intros K x.
-assert (forall (d : nilsquares K),
-  diff K x d = add K (diff K x (nilzero K)) (mul K x (nilsquare_incl K d))).
+intros R x.
+assert (forall (d : nilsquares R),
+  diff R x d = add R (diff R x (nilzero R)) (mul R x (nilsquare_incl R d))).
 intros d.
 unfold diff.
-rewrite -> (nilzero_def K).
-rewrite -> (mul_zero K).
-rewrite -> (add_comm K).
-rewrite -> (add_id K).
-rewrite -> (mul_comm K).
+rewrite -> (nilzero_def R).
+rewrite -> (mul_zero R).
+rewrite -> (add_comm R).
+rewrite -> (add_id R).
+rewrite -> (mul_comm R).
 reflexivity.
 symmetry.
-exact (linear_uniq K (diff K x) x H).
+exact (linear_uniq R (diff R x) x H).
 Qed.
 
 
-Lemma microcancellation : forall (K : KockLawvere),
-  forall (x y : synthreal K),
-  diff K x = diff K y -> x = y.
+Lemma microcancellation : forall (R : SynthReal),
+  forall (x y : set R),
+  diff R x = diff R y -> x = y.
 Proof.
-intros K x y hyp.
-rewrite <- (linearize_diff K x).
-rewrite <- (linearize_diff K y).
+intros R x y hyp.
+rewrite <- (linearize_diff R x).
+rewrite <- (linearize_diff R y).
 rewrite -> hyp.
 reflexivity.
 Qed.
@@ -192,60 +208,61 @@ Qed.
 (* Single-variable calculus! *)
 
 (**)
-Remark derivative_w_prf : forall (K : KockLawvere),
-  forall (f : synthreal K -> synthreal K),
-  exists (df : synthreal K -> synthreal K),
-  forall (x : synthreal K),
-  forall (d : nilsquares K),
-  f (add K x (nilsquare_incl K d))
-  = add K (f x) (mul K (nilsquare_incl K d) (df x)).
+Remark derivative_w_prf : forall (R : SynthReal),
+  forall (f : set R -> set R),
+  exists (df : set R -> set R),
+  forall (x : set R),
+  forall (d : nilsquares R),
+  f (add R x (nilsquare_incl R d))
+  = add R (f x) (mul R (nilsquare_incl R d) (df x)).
 Proof.
-intros K f.
+intros R f.
 pose (df0 := fun x =>
-  (linear_exist K (fun d => (f (add K x (nilsquare_incl K d)))))).
+  (linear_exist R (fun d => (f (add R x (nilsquare_incl R d)))))).
 exists (fun x => ex_proj1 (df0 x)).
 intros x d.
 (**)
 
 
-Definition derivative (K : KockLawvere)
-  (f : synthreal K -> synthreal K)
-  (x : synthreal K) : synthreal K :=
-  ex_proj1 (linear_exist K (fun d => f (add K x (nilsquare_incl K d)))).
+Definition derivative (R : SynthReal)
+  (f : set R -> set R)
+  (x : set R) : set R :=
+  ex_proj1 (linear_exist R (fun d => f (add R x (nilsquare_incl R d)))).
 
 
-Fact rewrite_derivative : forall (K : KockLawvere),
-  forall (f : synthreal K -> synthreal K),
-  forall (x : synthreal K),
-  forall (d : nilsquares K),
-  f (add K x (nilsquare_incl K d))
-  = add K (f x) (mul K (nilsquare_incl K d) (derivative K f x)).
+Fact rewrite_derivative : forall (R : SynthReal),
+  forall (f : set R -> set R),
+  forall (x : set R),
+  forall (d : nilsquares R),
+  f (add R x (nilsquare_incl R d))
+  = add R (f x) (mul R (nilsquare_incl R d) (derivative R f x)).
 Proof.
-intros K f x d.
-pose (ex_df := fun y => linear_exist K (fun d0 => f (add K y (nilsquare_incl K d0)))).
+intros R f x d.
+pose (ex_df := fun y =>
+  linear_exist R (fun d0 => f (add R y (nilsquare_incl R d0)))).
 unfold derivative.
-exact (linear_uniq K (fun d1 =>
-  f (add K x (nilsquare_incl K d1))) (derivative K f x) H).
+exact (linear_uniq R (fun d1 =>
+  f (add R x (nilsquare_incl R d1))) (derivative R f x) H).
 
 
-Proposition product_rule : forall (K : KockLawvere),
-  forall (f : synthreal K -> synthreal K),
-  forall (g : synthreal K -> synthreal K),
-  forall (x : synthreal K),
-  derivative K (fun y => mul K (f y) (g y)) x
-  = add K (mul K (derivative K f x) (g x)) (mul K (f x) (derivative K g x)).
+Proposition product_rule : forall (R : SynthReal),
+  forall (f : set R -> set R),
+  forall (g : set R -> set R),
+  forall (x : set R),
+  derivative R (fun y => mul R (f y) (g y)) x
+  = add R (mul R (derivative R f x) (g x)) (mul R (f x) (derivative R g x)).
 Proof.
-intros K f g x.
+intros R f g x.
 unfold derivative at 1.
-fold (derivative K f).
+fold (derivative R f).
 
 
-Theorem derivative_distrib : forall (K : KockLawvere),
-  forall (f : synthreal K -> synthreal K),
-  forall (g : synthreal K -> synthreal K),
-  forall (x : synthreal K),
-  add K (derivative K f x) (derivative K g x)
-  = derivative K (fun y => add K (f y) (g x)) x.
+Theorem derivative_distrib : forall (R : SynthReal),
+  forall (f : set R -> set R),
+  forall (g : set R -> set R),
+  forall (x : set R),
+  add R (derivative R f x) (derivative R g x)
+  = derivative R (fun y => add R (f y) (g x)) x.
 Proof.
-intros K f g x.
+intros R f g x.
 unfold derivative.
